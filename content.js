@@ -8,7 +8,7 @@ insertCSS(isChatGPT ? 'chatgpt' : 'wikipedia');
 if (isAndroid) insertCSS('android');
 
 function insertCSS(name) {
-  link = document.createElement('link');
+  const link = document.createElement('link');
   link.rel = 'stylesheet';
   link.href = chrome.runtime.getURL(`css/${name}.css`);
   document.head.appendChild(link);
@@ -17,8 +17,8 @@ function insertCSS(name) {
 function fetchContent(path, callback) {
   fetch(chrome.runtime.getURL(path))
     .then(response => response.text())
-    .then(svgContent => callback(svgContent))
-    .catch(error => console.error(`Error fetching SVG content: ${error}`));
+    .then(content => callback(content))
+    .catch(error => console.error(`Error fetching content: ${error}`));
 }
 
 function fetchSVGContent(name, callback) {
@@ -35,77 +35,138 @@ window.updateChat = () => {};
 
 let androidChat = () => document.querySelector("[class^='react-scroll-to-bottom']:not(.h-full)");
 function updateScroll() {
-  console.log("a")
   document.getElementById("contextMenu").style.top = putY + window.initialScroll - androidChat().scrollTop + "px";
 }
 
 fetchSVGContent('word', (wordSvgContent) => {
   fetchSVGContent('latex', (latexSvgContent) => {
-    if (!isAndroid) document.addEventListener("contextmenu", openContextMenu);
-    if (isAndroid) document.addEventListener("click", openContextMenu);
-    
-    // Experimental
-    window.updateChat = () => {
-      if (isChatGPT)
-      isChatLoaded = setInterval(() => {
-        chat = document.getElementsByClassName("pb-9")[0]?.parentElement; 
-        if (chat) {
-          clearInterval(isChatLoaded);
-          chat.addEventListener("scroll", removeContextMenu);
-          [...document.getElementsByClassName(isAndroid ? "agent-turn" : "pt-0.5")].forEach((e) => {
-            if (isAndroid) e = e.querySelector(".font-semibold");
-            if (!e.querySelector(".copy_eq_btn")) {
-              e.innerHTML += isWindows ? wordSvgContent + latexSvgContent : latexSvgContent;
-              [...e.querySelectorAll(".copy_eq_btn")].forEach((elem, index) => elem.addEventListener("click", () => {
-                copyAll(isAndroid ? e.nextSibling : e.parentElement.parentElement.nextSibling, isAndroid ? "copyLaTeX" : (index == 0 ? "copyMathML" : "copyLaTeX"));
-              }));
+    fetchSVGContent('copyMathML', (copyMathMLContent) => { // 新增MathML图标
+      if (!isAndroid) document.addEventListener("contextmenu", openContextMenu);
+      if (isAndroid) document.addEventListener("click", openContextMenu);
+
+      // 识别含字母的段落
+      identifyTextSegments();
+
+      // Experimental
+      window.updateChat = () => {
+        if (isChatGPT)
+          isChatLoaded = setInterval(() => {
+            chat = document.getElementsByClassName("pb-9")[0]?.parentElement; 
+            if (chat) {
+              clearInterval(isChatLoaded);
+              chat.addEventListener("scroll", removeContextMenu);
+              [...document.getElementsByClassName(isAndroid ? "agent-turn" : "pt-0.5")].forEach((e) => {
+                if (isAndroid) e = e.querySelector(".font-semibold");
+                if (!e.querySelector(".copy_eq_btn")) {
+                  e.innerHTML += isWindows ? wordSvgContent + latexSvgContent : latexSvgContent;
+                  [...e.querySelectorAll(".copy_eq_btn")].forEach((elem, index) => elem.addEventListener("click", () => {
+                    copyAll(isAndroid ? e.nextSibling : e.parentElement.parentElement.nextSibling, isAndroid ? "copyLaTeX" : (index == 0 ? "copyMathML" : "copyLaTeX"));
+                  }));
+                }
+              })
             }
-          })
+          }, 10);
+      };
+
+      function openContextMenu(event) {
+        removeContextMenu();
+        let Element = isChatGPT ? findKatexElement(event.clientX, event.clientY) : findMweElement(event.clientX, event.clientY);
+        let TextElement = findTextSegment(event.clientX, event.clientY); // 新增文本段落检测
+        if (Element || TextElement) {
+          event.preventDefault();
+
+          if (isAndroid) {
+            window.initialScroll = androidChat().scrollTop;
+            androidChat().addEventListener("scroll", updateScroll);
+          }
+
+          let contextMenuHTML = `<div id="contextMenu" ${isAndroid ? '' : 'desktop'} style="left: ${putX}px; top: ${putY + window.scrollY}px;">`;
+
+          if (Element) {
+            contextMenuHTML += `
+              <div id="copyMathML">${wordSvgContent + (isAndroid ? "" : "Copy for Word (MathML)")}</div>
+              <div id="copyLaTeX">${latexSvgContent + (isAndroid ? "" : "Copy LaTeX")}</div>`;
+          }
+
+          if (TextElement) { // 新增MathML复制选项
+            contextMenuHTML += `
+              <div id="copyTextWithMathML">${copyMathMLContent + " 复制带MathML的字母"}</div>`;
+          }
+
+          contextMenuHTML += `</div>`;
+
+          contextMenu = document.createElement('div');
+          contextMenu.innerHTML = contextMenuHTML;
+          document.body.appendChild(contextMenu);
+
+          if (Element) {
+            document.getElementById("copyMathML").addEventListener("click", () => {
+              checkAndCopy(Element, "copyMathML");
+            });
+
+            document.getElementById("copyLaTeX").addEventListener("click", () => {
+              checkAndCopy(Element, "copyLaTeX");
+            });
+          }
+
+          if (TextElement) { // 新增事件绑定
+            document.getElementById("copyTextWithMathML").addEventListener("click", () => {
+              copyTextWithMathML(TextElement);
+            });
+          }
         }
-      }, 10);
-    };
-
-    function openContextMenu(event) {
-      removeContextMenu();
-      let Element = isChatGPT ? findKatexElement(event.clientX, event.clientY) : findMweElement(event.clientX, event.clientY);
-      if (Element) {
-        event.preventDefault();
-
-        if (isAndroid) {
-          window.initialScroll = androidChat().scrollTop;
-          androidChat().addEventListener("scroll", updateScroll);
-        }
-
-        let contextMenuHTML = `
-        <div id="contextMenu" ${isAndroid ? '' : 'desktop'} style="left: ${putX}px; top: ${putY + window.scrollY}px;">
-          <div id="copyMathML">${wordSvgContent + (isAndroid ? "" : "Copy for Word (MathML)")}</div>
-          <div id="copyLaTeX">${latexSvgContent + (isAndroid ? "" : "Copy LaTeX")}</div>
-        </div>`;
-
-        contextMenu = document.createElement('div');
-        contextMenu.innerHTML = contextMenuHTML;
-        document.body.appendChild(contextMenu);
-
-        document.getElementById("copyMathML").addEventListener("click", () => {
-          checkAndCopy(Element, "copyMathML");
-        });
-
-        document.getElementById("copyLaTeX").addEventListener("click", () => {
-          checkAndCopy(Element, "copyLaTeX");
-        });
       }
-    }
-    
-    updateChat();
+
+      updateChat();
+    })
   })
 })
 
+// 新增函数：识别含字母的段落
+function identifyTextSegments() {
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
+  let node;
+  while (node = walker.nextNode()) {
+    if (/[A-Za-z]/.test(node.textContent)) {
+      const parent = node.parentElement;
+      if (!parent.classList.contains('mathml-text-segment')) {
+        parent.classList.add('mathml-text-segment');
+      }
+    }
+  }
+}
+
+// 新增函数：查找文本段落元素
+function findTextSegment(x, y) {
+  const elements = document.getElementsByClassName('mathml-text-segment');
+  for (const element of elements) {
+    const rect = element.getBoundingClientRect();
+    if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+      putX = isAndroid ? rect.right + 7 : x;
+      putY = isAndroid ? rect.top - 23 - document.body.clientHeight : y;
+      return element;
+    }
+  }
+  return null;
+}
+
+// 新增函数：复制文本中带MathML的字母
+function copyTextWithMathML(element) {
+  const text = element.textContent;
+  const processedContent = text.replace(/([A-Za-z])/g, match => {
+    return `<math xmlns="http://www.w3.org/1998/Math/MathML"><mi>${match}</mi></math>`;
+  });
+  copyToClipboard(processedContent);
+}
+
+// 保持现有的removeContextMenu函数不变
 function removeContextMenu() {
   updateChat();
   contextMenu?.remove();
   androidChat().removeEventListener("scroll", updateScroll)
 }
 
+// 现有的辅助函数保持不变
 function isWithin(x, y, classNames, func) {
   let elements = [];
   classNames.forEach((e) => {elements = elements.concat([...document.getElementsByClassName(e)])});
@@ -124,7 +185,6 @@ function isWithin(x, y, classNames, func) {
 const findMweElement = (x, y) => isWithin(x, y, ["mwe-math-fallback-image-inline", "mwe-math-fallback-image-display"], (e) => e.parentElement),
       findKatexElement = (x, y) => isWithin(x, y, ["katex"], (e) => e),
       format = (string, type) => (type == "copyLaTeX" ? `$${string}$` : string);
-      
 
 function addBreaks(string, array) {
   array.forEach((e) => { string = string.replaceAll(e[0], `${e[2] ? e[2] : ""}${e[0]}${"\n".repeat(e[1])}`) })

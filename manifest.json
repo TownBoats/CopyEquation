@@ -1,6 +1,6 @@
 {
   "manifest_version": 2,
-  "name": "Copy Equation from ChatGPT and Wikipedia",
+  "name": "调试版本-Copy Equation from ChatGPT and Wikipedia",
   "version": "3.6",
   "description": "Copy MathML and LaTeX from math elements",
   "permissions": [
