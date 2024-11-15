@@ -6,7 +6,9 @@ const parser = new DOMParser();
 insertCSS('contextMenu');
 insertCSS(isChatGPT ? 'chatgpt' : 'wikipedia');
 if (isAndroid) insertCSS('android');
-
+document.addEventListener("contextmenu", (event) => {
+  event.preventDefault(); // 阻止浏览器自带的上下文菜单
+});
 function insertCSS(name) {
   const link = document.createElement('link');
   link.rel = 'stylesheet';
